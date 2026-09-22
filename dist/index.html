@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Perler 3D Editor</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>" />
+  <script type="module" crossorigin src="/assets/index-pFdqvZPf.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CiH7-WNh.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Toolbar -->
+    <header id="toolbar">
+      <div class="toolbar-left">
+        <span class="logo">Perler 3D</span>
+      </div>
+      <div class="toolbar-center">
+        <button class="tb-btn" data-tool="select" title="选择 (Q)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+        </button>
+        <button class="tb-btn" data-tool="orbit" title="旋转">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </button>
+        <button class="tb-btn" data-tool="pan" title="平移">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l-7 7 7 7"/></svg>
+        </button>
+      </div>
+      <div class="toolbar-right">
+        <button id="btn-reset-view" class="tb-btn" title="重置视角">⟲</button>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div id="layout">
+      <!-- Left Panel: Scene / File -->
+      <aside id="panel-left" class="panel">
+        <div class="panel-tabs">
+          <button class="tab active" data-tab="scene">场景</button>
+          <button class="tab" data-tab="file">文件</button>
+        </div>
+        <div class="panel-content">
+          <!-- Scene Tab -->
+          <div class="tab-content active" id="tab-scene">
+            <div class="section">
+              <h3>模型列表</h3>
+              <div id="model-list">
+                <div class="empty-state">暂无模型</div>
+              </div>
+            </div>
+          </div>
+          <!-- File Tab -->
+          <div class="tab-content" id="tab-file">
+            <div class="section">
+              <h3>导入模型</h3>
+              <div id="drop-zone" class="drop-zone">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p>拖拽模型文件到此处</p>
+                <p class="hint">支持 OBJ / GLB / FBX / STL</p>
+                <input type="file" id="file-input" accept=".obj,.glb,.gltf,.fbx,.stl,.stla,.stlb" multiple hidden />
+                <button id="btn-select-file" class="btn">选择文件</button>
+              </div>
+            </div>
+            <div class="section">
+              <h3>导入贴图</h3>
+              <div class="texture-upload">
+                <input type="file" id="texture-input" accept="image/*" hidden />
+                <button id="btn-select-texture" class="btn btn-sm">选择贴图</button>
+                <span class="hint" id="texture-name">未选择</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center: 3D Viewport -->
+      <main id="viewport">
+        <div id="canvas-container"></div>
+        <div id="viewport-overlay">
+          <div id="model-info" class="overlay-badge" hidden></div>
+          <div id="fps-counter" class="overlay-badge fps">-- FPS</div>
+        </div>
+      </main>
+
+      <!-- Right Panel: Properties -->
+      <aside id="panel-right" class="panel">
+        <div class="panel-tabs">
+          <button class="tab active" data-tab="material">材质</button>
+          <button class="tab" data-tab="shader">Shader</button>
+          <button class="tab" data-tab="export">导出</button>
+        </div>
+        <div class="panel-content">
+          <!-- Material Tab -->
+          <div class="tab-content active" id="tab-material">
+            <div class="section">
+              <h3>材质属性</h3>
+              <div class="prop-group">
+                <label class="prop-row">
+                  <span>基础色</span>
+                  <input type="color" id="prop-baseColor" value="#ffffff" />
+                </label>
+                <label class="prop-row">
+                  <span>金属度</span>
+                  <input type="range" id="prop-metalness" min="0" max="1" step="0.01" value="0" />
+                  <span class="val" id="val-metalness">0</span>
+                </label>
+                <label class="prop-row">
+                  <span>粗糙度</span>
+                  <input type="range" id="prop-roughness" min="0" max="1" step="0.01" value="0.5" />
+                  <span class="val" id="val-roughness">0.5</span>
+                </label>
+                <label class="prop-row">
+                  <span>自发光</span>
+                  <input type="color" id="prop-emissive" value="#000000" />
+                </label>
+                <label class="prop-row">
+                  <span>发光强度</span>
+                  <input type="range" id="prop-emissiveIntensity" min="0" max="5" step="0.1" value="0" />
+                  <span class="val" id="val-emissiveIntensity">0</span>
+                </label>
+                <label class="prop-row">
+                  <span>透明度</span>
+                  <input type="range" id="prop-opacity" min="0" max="1" step="0.01" value="1" />
+                  <span class="val" id="val-opacity">1</span>
+                </label>
+              </div>
+            </div>
+            <div class="section">
+              <h3>贴图通道</h3>
+              <div class="prop-group">
+                <div class="map-row" data-channel="map">
+                  <span>漫反射贴图</span>
+                  <button class="btn-map-set">设置</button>
+                  <button class="btn-map-clear" hidden>清除</button>
+                  <span class="map-status">未设置</span>
+                </div>
+                <div class="map-row" data-channel="normalMap">
+                  <span>法线贴图</span>
+                  <button class="btn-map-set">设置</button>
+                  <button class="btn-map-clear" hidden>清除</button>
+                  <span class="map-status">未设置</span>
+                </div>
+                <div class="map-row" data-channel="roughnessMap">
+                  <span>粗糙度贴图</span>
+                  <button class="btn-map-set">设置</button>
+                  <button class="btn-map-clear" hidden>清除</button>
+                  <span class="map-status">未设置</span>
+                </div>
+                <div class="map-row" data-channel="metalnessMap">
+                  <span>金属度贴图</span>
+                  <button class="btn-map-set">设置</button>
+                  <button class="btn-map-clear" hidden>清除</button>
+                  <span class="map-status">未设置</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shader Tab -->
+          <div class="tab-content" id="tab-shader">
+            <div class="section">
+              <h3>Shader 预设</h3>
+              <div class="preset-list" id="shader-presets">
+                <button class="preset-btn active" data-preset="pbr">标准 PBR</button>
+                <button class="preset-btn" data-preset="toon">卡通 (Toon)</button>
+                <button class="preset-btn" data-preset="phong">Phong</button>
+                <button class="preset-btn" data-preset="matte">哑光</button>
+                <button class="preset-btn" data-preset="outline">轮廓描边</button>
+                <button class="preset-btn" data-preset="fresnel">菲涅尔</button>
+              </div>
+            </div>
+            <div class="section">
+              <h3>自定义 Shader</h3>
+              <div class="shader-editor">
+                <div class="shader-tabs">
+                  <button class="shader-tab active" data-shader="vertex">顶点</button>
+                  <button class="shader-tab" data-shader="fragment">片元</button>
+                </div>
+                <textarea id="shader-vertex" class="shader-code" spellcheck="false">${`void main() {
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`}</textarea>
+                <textarea id="shader-fragment" class="shader-code" hidden spellcheck="false">${`void main() {
+  gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}`}</textarea>
+                <div class="shader-actions">
+                  <button id="btn-apply-shader" class="btn btn-sm">应用</button>
+                  <button id="btn-reset-shader" class="btn btn-sm btn-secondary">重置</button>
+                </div>
+                <div id="shader-error" class="shader-error" hidden></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Export Tab -->
+          <div class="tab-content" id="tab-export">
+            <div class="section">
+              <h3>导出设置</h3>
+              <div class="prop-group">
+                <label class="prop-row">
+                  <span>导出格式</span>
+                  <select id="export-format">
+                    <option value="fbx">FBX (Unity 推荐)</option>
+                    <option value="glb">GLB</option>
+                    <option value="obj">OBJ</option>
+                  </select>
+                </label>
+                <label class="prop-row">
+                  <span>嵌入贴图</span>
+                  <input type="checkbox" id="export-embedTextures" checked />
+                </label>
+                <label class="prop-row">
+                  <span>Y轴向上</span>
+                  <input type="checkbox" id="export-yUp" checked />
+                </label>
+                <label class="prop-row">
+                  <span>应用变换</span>
+                  <input type="checkbox" id="export-applyTransform" checked />
+                </label>
+              </div>
+              <button id="btn-export" class="btn btn-primary btn-block" disabled>
+                导出模型
+              </button>
+              <p id="export-status" class="export-status"></p>
+            </div>
+            <div class="section">
+              <h3>Unity 使用指引</h3>
+              <div class="guide-text">
+                <ol>
+                  <li>点击导出按钮下载 FBX 文件</li>
+                  <li>将 FBX 拖入 Unity 项目窗口</li>
+                  <li>在 Inspector 中调整导入设置</li>
+                  <li>拖拽到场景中使用</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Status Bar -->
+    <footer id="statusbar">
+      <span id="status-text">就绪</span>
+      <span id="status-coords"></span>
+    </footer>
+  </div>
+
+</body>
+</html>

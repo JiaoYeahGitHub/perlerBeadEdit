@@ -1,0 +1,32 @@
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+# VS / IDE
+*.csproj
+*.sln
+*.suo
+*.user
+*.userosscache
+*.userprefs
+.vs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# JetBrains
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# VS Code
+.vscode/
+
+
+node_modules/
