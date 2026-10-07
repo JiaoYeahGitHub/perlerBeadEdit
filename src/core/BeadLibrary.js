@@ -11,7 +11,8 @@ const DEFAULT_ALPHA = 1; // 游戏 PerlerBead.SetBead → ApplyColor(color, 1f)�
  * 与游戏数据结构对齐：
  *   - 逐豆：`{name, color}`（bead_config.json），另加 `_BaseColor.a`（透明 shader 读取的 alpha）；
  *   - 逐类型：`_MaterialType/_Roughness/_Metallic/_IOR/_Thickness` 走共享材质，同类豆子共用
- *     （BeadMaterialBank.cs:48-52 —— 游戏里 4 类 = 4 个共享 Material，逐豆只经 MPB 改颜色）。
+ *     （perlerSteam `BeadMaterialBank.cs:10-16,36-52` —— 4 类材质，且按 (类型 × 颜色)
+ *      逐个烘焙 sharedMaterial 并开 GPU Instancing；编辑器只用一个共享材质对象改色）。
  */
 export class BeadLibrary {
   constructor() {
@@ -208,11 +209,18 @@ export class BeadLibrary {
   // ─── 导出 ──────────────────────────────────────────
 
   /**
-   * 生成游戏可用的配置表。
+   * 生成配置表 JSON。
    *
-   * 顶层 4 个键（Basic/Matallic/Metta/Transparent）与
-   * `Assets/Resources/Configs/bead_config.json` 结构完全一致，可整体替换该文件
-   * （Unity `JsonUtility` 会忽略下划线开头的额外字段，因此 BSDF 数据可安全附带）。
+   * 结构沿用旧版 Unity 工程的 `Assets/Resources/Configs/bead_config.json`
+   * （顶层 4 个键 `Basic/Matallic/Metta/Transparent`，每类 `{ beads: [{ name, color }] }`），
+   * 便于美术交给程序做数据迁移。
+   *
+   * ⚠ perlerSteam 现状：该文件**已被删除**，豆子颜色改为硬编码
+   * `Assets/Scripts/Perler/Data/BeadColors.cs`（40 色）+ 本地化 key `color.<HEX>`
+   * （`BeadColors.cs:7` 注释"替代原 Resources/Configs/bead_config.json"；
+   * 调色盘见 `UI/PerlerPlayView.cs:168-203`）。因此本导出**目前没有运行时消费者**，
+   * 需要程序侧决定落地形态（改回 JSON 配置系统 / 由脚本生成 BeadColors.cs + 本地化条目）。
+   * 额外字段（下划线开头）会被 Unity `JsonUtility` 忽略，不影响旧格式兼容。
    */
   toConfig(meta = {}) {
     const out = {};
@@ -227,16 +235,18 @@ export class BeadLibrary {
           color: b.color.toUpperCase(),
           _alpha: round(b.alpha),
           _baseColor: baseColorLinear(b.color, b.alpha).map(round),
+          // 旧版约定：图标位于 Resources/Beads/<name>.png（perlerSteam 已删除该目录）
           _icon: `Beads/${b.name}.png`,
         })),
       };
     }
     out._meta = {
-      generator: 'perler3d-edt',
+      generator: 'perlerBeadEdit',
       generatedAt: new Date().toISOString(),
-      source: 'Unity 工程 perler (Assets/Scripts/Perler/BeadMaterialBank.cs + Master_Bead_Shader*)',
+      source: 'Unity 工程 perlerSteam (Assets/Scripts/Perler/BeadMaterialBank.cs + Resources/Shaders/Master_Bead_Shader*)',
       colorSpace: 'beads[].color 为 sRGB hex；_baseColor 为写入 _BaseColor 的线性 RGBA（GammaToLinearSpace）',
       shaderNote: '_MaterialType/_IOR/_Thickness 在 Master_Bead_Shader 内被赋值但 surf() 未读取，不影响画面',
+      consumerNote: 'perlerSteam 已删除 Resources/Configs/bead_config.json（颜色改为 BeadColors.cs 硬编码 40 色 + 本地化 color.<HEX>），本文件目前无运行时消费者',
       ...meta,
     };
     return out;

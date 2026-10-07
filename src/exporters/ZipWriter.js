@@ -2,7 +2,8 @@
  * ZipWriter — 极简 ZIP 打包（存储方式，不压缩）。
  *
  * 用途：一次性导出 N 张豆子图标（每颗豆子 1 张 `<name>.png`），
- * 与 Unity `Assets/Resources/Beads/` 的命名与目录规则一致（BeadConfig.cs:20 SpritePath = "Beads/" + name）。
+ * 条目名沿用旧版约定 `<name>.png`（旧工程 perler3D 的 `Resources/Beads/` 目录规则；
+ * perlerSteam 已删除该目录，落地位置由程序侧决定）。
  * PNG 本身已压缩，ZIP 再压缩收益极低，故只做 store，避免引入依赖。
  */
 

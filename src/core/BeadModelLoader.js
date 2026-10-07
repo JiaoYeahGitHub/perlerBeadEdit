@@ -7,20 +7,29 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 /** 默认豆子模型：与 Unity 工程 `Assets/Resources/GLB/perlerbead.glb` 逐字节相同的运行时网格 */
 const DEFAULT_BEAD_MODEL = {
   name: 'perlerbead.glb',
-  url: 'perlerbead.glb',
+  url: 'models/perlerbead.glb',
+};
+
+/** 默认棋盘瓦片：Unity `Assets/Resources/GLB/perlergrid.glb`（**单格瓦片**，整盘由阵列铺出） */
+export const DEFAULT_BOARD_MODEL = {
+  name: 'perlergrid.glb',
+  url: 'models/perlergrid.glb',
 };
 
 const EXTENSIONS = ['glb', 'gltf', 'fbx', 'obj', 'stl', 'stla', 'stlb'];
 
 /**
- * BeadModelLoader — 上传/加载「豆子模型」模板。
+ * BeadModelLoader — 上传/加载「模板网格」（豆子模板，或棋盘瓦片模板）。
  *
- * 游戏里所有豆子都是同一个网格 `Resources/GLB/perlerbead.glb`（PerlerGrid.cs:714-715
- * `BeadFitScale = _cellSize / beadMesh.bounds.size.x` 缩放后按格摆放），
- * 编辑器沿用同一规则：模板归一化后由 BeadStage 复制出散落的豆子。
+ * 游戏里所有豆子都是同一个网格 `Resources/GLB/perlerbead.glb`（perlerSteam 的
+ * `PerlerGrid.cs:344-345 BeadFitScale = _cellSize / beadMesh.bounds.size.x` 缩放后按格摆放），
+ * 棋盘则是 `Resources/GLB/perlergrid.glb` 的**单格瓦片**阵列。
+ * 编辑器沿用同一规则：模板加载后由 BeadStage / BoardStage 复制或实例化。
  */
 export class BeadModelLoader {
-  constructor() {
+  /** @param {{name:string,url:string}} [defaultModel] 默认模板（豆子或棋盘瓦片） */
+  constructor(defaultModel = DEFAULT_BEAD_MODEL) {
+    this._default = defaultModel;
     this._loaders = {
       gltf: new GLTFLoader(),
       fbx: new FBXLoader(),
@@ -54,9 +63,9 @@ export class BeadModelLoader {
     }
   }
 
-  /** 加载内置默认模型（public/perlerbead.glb） */
+  /** 加载内置默认模型（默认：`public/models/perlerbead.glb`） */
   async loadDefault() {
-    return this._adopt(DEFAULT_BEAD_MODEL.url, 'glb', DEFAULT_BEAD_MODEL.name);
+    return this._adopt(this._default.url, 'glb', this._default.name);
   }
 
   async _adopt(url, ext, name) {

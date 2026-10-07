@@ -1,40 +1,36 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
-import { BEAD_LAYERS } from '../core/BeadStage.js';
+import { BEAD_LAYERS } from '../core/Layers.js';
+import { SkyboxLibrary } from '../core/SkyboxLibrary.js';
 
 /**
- * 游戏光照还原（Unity 工程 perler）：
- *   - 场景唯一平行光：SampleScene.unity m_Color {1, 0.95686275, 0.8392157} = #FFF4D6，intensity 1；
- *     四元数 (0.40821788, -0.23456968, 0.10938163, 0.8754261) 的 forward = q·(0,0,1) = (-0.321, -0.766, 0.556)，
- *     取反得「指向光源」方向，Unity(z) → three(-z) 后为 (0.321, 0.766, 0.556)。
- *   - 环境：PerlerGameManager.EnterGameEnvironment 把 skybox 设为 Resources/SkyBox/forest.exr，
- *     ambientMode = Skybox、ambientIntensity = 1、reflectionIntensity = 1
- *     → three 侧等价于 scene.environment = PMREM(forest.exr)、environmentIntensity = 1
- *       （金属豆子的可见颜色 = baseColor × 环境反射，与游戏一致）。
- *   - Unity Built-in 管线没有后期/色调映射（无 PostProcess/Volume/Bloom），故 NoToneMapping。
- *   - 豆子 receiveShadows = false（PerlerBead.cs:57），因此整个场景不开阴影贴图。
+ * 光照：perlerSteam **没有任何实时灯光**——场景里的 Directional Light 物体 `m_IsActive: 0`
+ * （`Perler.unity:141`），`PerlerGameManager.SetupScene` 里建主光/补光的代码整段被注释
+ * （`:79-100`），全工程无 `AddComponent<Light>`。豆子的照明完全来自天空盒：
+ * `ambientMode = Skybox`（`ambientIntensity 1`）+ `defaultReflectionMode = Skybox`
+ * （`reflectionIntensity 1`）（`PerlerGameManager.cs:191-198`）。
  *
- * 光照强度说明：Unity 侧漫反射约定为 albedo × NdotL × lightColor（1/π 已折进力度），
- * three 的平行光辐照度为 color × intensity 且 BRDF 含 1/π，故取 intensity ≈ π 与游戏亮度对齐；
- * 该值经与参考图 public/bead_13.png 的实测亮度校准（见 Editor 中的常量）。
+ * 因此这里的平行光默认强度为 **0**（不参与照明），仅作为美术调色的可选"补光"保留；
+ * 真正的光照基准是 `SkyboxLibrary` 提供的天空盒（环境光 + 环境反射）。
+ * 强度语义：three 的平行光辐照度 = color × intensity，BRDF 含 1/π，与 Unity 的
+ * `albedo × NdotL × lightColor`（1/π 已折进力度）相差一个 π 因子，故要让"补光"与
+ * Unity 侧同强度可比的取值为 intensity ≈ π。
  */
-const GAME_LIGHT = {
-  color: 0xfff4d6,
-  intensity: Math.PI,
+const KEY_LIGHT_DEFAULTS = {
+  color: 0xfff4d6, // perlerSteam 场景灯颜色 #FFF4D6（当前 inactive，仅作补光默认值）
   direction: [0.321, 0.766, 0.556],
+  intensity: 0,
 };
-const ENV_INTENSITY = 1;
-
-/** 环境贴图：与游戏 skybox 同源的 HDRI */
-const ENV_URL = 'forest.exr';
 
 /**
- * Viewport — three.js 渲染视口：WebGL 渲染器 + 交互相机 + 游戏同源光照/环境 + 逐帧循环。
+ * Viewport — three.js 渲染视口：WebGL 渲染器 + 天空盒光照 + 交互相机 + 逐帧循环。
  *
- * 视口只显示单颗豆子（BeadStage.preview，图层 BEAD_LAYERS.preview）；
- * 图标内容（底板 + 散落豆子）在另一图层，由 IconExporter 用 iconCamera 单独渲染。
- * 渲染器开启 alpha（清屏透明）：实时预览时由 CSS 棋盘背景衬底，图标渲染则以透明底参与圆角遮罩合成。
+ * 相机由各模式注册的取景函数摆放（`setFramer`）：
+ *   - 「只展示豆子」：`BeadStage.framePreview`（3/4 视角看单颗豆子，图层 preview）；
+ *   - 「只展示棋盘」/「棋盘 + 豆子」：`BoardStage.frameGameView`（正俯视 + Unity FOV 100）。
+ * 图标内容（底板 + 散落豆子）在图层 0，只被 `BeadStage.iconCamera` 看到。
+ *
+ * 渲染器开启 alpha（清屏透明）：豆子模式由 CSS 棋盘背景衬底；游戏视角模式则由天空穹顶铺满背景。
  */
 export class Viewport {
   constructor(container, scene) {
@@ -44,8 +40,13 @@ export class Viewport {
     this._framer = null;
 
     this._init();
-    /** 环境贴图就绪的 Promise（图标导出前可 await，确保金属反射已生效） */
-    this.envReady = this._loadEnvironment();
+
+    /** 天空盒（光照基准 + 游戏视角背景） */
+    this.skybox = new SkyboxLibrary(this.renderer, scene);
+    this.skybox.dome.layers.set(BEAD_LAYERS.preview); // 天空只进交互视口，不进图标渲染
+    /** 天空盒就绪的 Promise（导出图标前可 await，确保环境光/反射已生效） */
+    this.envReady = this.skybox.init();
+
     this._animate();
   }
 
@@ -56,58 +57,49 @@ export class Viewport {
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0); // 透明底
-    this.renderer.shadowMap.enabled = false; // 游戏豆子不接收阴影
-    this.renderer.toneMapping = THREE.NoToneMapping; // 游戏无色调映射
+    this.renderer.shadowMap.enabled = false; // 游戏豆子/棋盘都不接收阴影
+    this.renderer.toneMapping = THREE.NoToneMapping; // 游戏无色调映射（Built-in 无 PostProcess）
     this.container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(45, (w || 1) / (h || 1), 0.01, 500);
-    this.camera.layers.set(BEAD_LAYERS.preview); // 交互视口只看单颗预览豆子
+    this.camera.layers.set(BEAD_LAYERS.preview); // 交互视口只看 preview 层
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.1;
     this.controls.minDistance = 0.3;
-    this.controls.maxDistance = 30;
+    this.controls.maxDistance = 200;
     this.controls.target.set(0, 0, 0);
 
-    const light = new THREE.DirectionalLight(GAME_LIGHT.color, GAME_LIGHT.intensity);
-    light.position.set(...GAME_LIGHT.direction).normalize().multiplyScalar(10);
-    light.layers.enable(BEAD_LAYERS.preview); // 光源需同时照到图标层与预览层
-    this.scene.add(light);
-
-    this.resetView();
+    // 可选补光：默认强度 0 = 与游戏一致（游戏无实时灯）
+    this.keyLight = new THREE.DirectionalLight(KEY_LIGHT_DEFAULTS.color, KEY_LIGHT_DEFAULTS.intensity);
+    this._setKeyLightPosition(KEY_LIGHT_DEFAULTS.direction);
+    this.keyLight.layers.enable(BEAD_LAYERS.preview);
+    this.scene.add(this.keyLight);
 
     this._resizeObserver = new ResizeObserver(() => this._resize());
     this._resizeObserver.observe(this.container);
   }
 
-  /**
-   * 注册取景函数（由 BeadStage 提供）：fn(camera, target) 摆放相机并写回注视点。
-   */
+  _setKeyLightPosition(direction) {
+    this.keyLight.position.fromArray(direction).normalize().multiplyScalar(100);
+  }
+
+  /** 补光参数（颜色 / 方向 / 强度）；强度 0 即关闭 */
+  setKeyLight(patch = {}) {
+    if (patch.color !== undefined) this.keyLight.color.set(patch.color);
+    if (patch.direction) this._setKeyLightPosition(patch.direction);
+    if (patch.intensity !== undefined) this.keyLight.intensity = Math.max(0, Number(patch.intensity));
+  }
+
+  /** 注册取景函数（由各模式提供）：fn(camera, target) 摆放相机并写回注视点 */
   setFramer(fn) {
     this._framer = fn;
     this.resetView();
   }
 
-  async _loadEnvironment() {
-    try {
-      const exr = await new EXRLoader().loadAsync(ENV_URL);
-      exr.mapping = THREE.EquirectangularReflectionMapping;
-      const pmrem = new THREE.PMREMGenerator(this.renderer);
-      this.scene.environment = pmrem.fromEquirectangular(exr).texture;
-      this.scene.environmentIntensity = ENV_INTENSITY;
-      pmrem.dispose();
-      exr.dispose();
-    } catch (err) {
-      // 环境缺失时仅剩平行光：金属类豆子会明显变暗，需在界面上告知
-      console.error(`[Viewport] 环境贴图 ${ENV_URL} 载入失败`, err);
-      this.scene.environment = null;
-      throw err;
-    }
-  }
-
   setTool(tool) {
-    this.controls.enableRotate = tool === 'orbit';
+    this.controls.enableRotate = tool !== 'none';
     this.controls.enablePan = tool !== 'select';
     this.controls.enableZoom = true;
   }
@@ -134,6 +126,7 @@ export class Viewport {
   _animate() {
     this._animationId = requestAnimationFrame(() => this._animate());
     this.controls.update();
+    this.skybox.syncDome(this.camera);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -166,6 +159,7 @@ export class Viewport {
     if (this._animationId) cancelAnimationFrame(this._animationId);
     this._resizeObserver?.disconnect();
     this.controls.dispose();
+    this.skybox.dispose();
     this.renderer.dispose();
   }
 }

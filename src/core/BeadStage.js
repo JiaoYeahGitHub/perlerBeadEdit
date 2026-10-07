@@ -1,23 +1,21 @@
 import * as THREE from 'three';
 import { applyBeadMaterial, applyPlateMaterial } from './BeadMaterial.js';
 import { getType } from './BeadTypes.js';
-
-/**
- * 图层划分：
- *   0 (icon)    地面 + 堆叠的豆子 —— 仅图标相机可见；
- *   1 (preview) 单颗豆子 —— 仅交互视口（透视相机）可见。
- */
-export const BEAD_LAYERS = { icon: 0, preview: 1 };
+import { BEAD_LAYERS } from './Layers.js';
 
 /**
  * 图标规格。
  *
- * 画幅对齐参考图 `public/bead_13.png`（= Unity `Assets/Resources/Beads/bead_13.png`）：
+ * 画幅对齐参考图 `public/bead_13.png`（该图取自**旧工程 perler3D** 的
+ * `Assets/Resources/Beads/bead_13.png`；perlerSteam 已删除 `Resources/Beads/` 目录，
+ * 因此它只作为构图/圆角规格的参考，不代表 perlerSteam 的运行时渲染）：
  *   256×256 RGBA；参考图不透明内容区恰为 13..242（四边 13px 透明）；圆角拟合半径 ≈ 44px @230px。
  *
  * 相机：`camera` 段驱动透视相机的 fov / 俯角 / 方位 / 取景上限（tiltDeg = 0 即正俯视）。
- * 游戏侧参考：Unity `PerlerGameManager` 的相机为 fov 130、位置 (0,45,-70)（俯角约 57°），
- * `GridZoomController` 默认 Pitch 90（正俯视）。
+ * 游戏侧参考：Unity `PerlerGameManager` 的相机为 fov **100**、位置 (0,45,-70)、near/far 0.1/1000
+ * （`PerlerGameManager.cs:68-74`），进关卡后由 `GridZoomController` 锁成 Pitch 90（正俯视）、
+ * 视距 20~90（默认 80）（`GridZoomController.cs:13-14,31-34`）；图标构图与游戏相机无关，
+ * 这里的 fov 38 / 俯角 1° 是按参考图 `public/bead_13.png` 拟合的编辑器取景。
  */
 export const ICON_SPEC = {
   size: 256,
@@ -90,10 +88,11 @@ export class BeadStage {
 
   /**
    * 设置豆子模型模板（预览豆子与堆叠豆子均由它克隆）。
+   * 先克隆再归一化：`model.root` 保持原始姿态（BoardStage 的盘上豆子要用未改写过的模板）。
    * @param {{root:THREE.Object3D, name:string}} model
    */
   setTemplate(model) {
-    this._template = normalizeTemplate(model.root);
+    this._template = normalizeTemplate(model.root.clone(true));
     this._templateSize = new THREE.Box3().setFromObject(this._template).getSize(new THREE.Vector3());
     this._layoutSeed = null;
     this._rebuild(model.name);
@@ -109,6 +108,20 @@ export class BeadStage {
     applyPlateMaterial(this._groundMat, bead);
     this.beadColor = bead.color;
     if (this._template && this._layoutSeed !== bead.name) this._rebuild(bead.name);
+  }
+
+  /** 单颗预览豆子的可见性（「只展示棋盘」/「棋盘 + 豆子」模式隐藏它） */
+  setPreviewVisible(visible) {
+    this.preview.visible = visible;
+  }
+
+  /**
+   * 镜面环境反射强度（对应 Unity `RenderSettings.reflectionIntensity`）：
+   * three 的环境贴图同时驱动漫反射与镜面，这里用材质的 `envMapIntensity` 承载反射部分。
+   */
+  setEnvIntensity(value) {
+    this._beadMat.envMapIntensity = value;
+    this._beadMat.needsUpdate = true;
   }
 
   /**
@@ -307,7 +320,7 @@ export class BeadStage {
       if (!child.isMesh) return;
       child.material = this._beadMat;
       child.castShadow = false;
-      child.receiveShadow = false; // 游戏 PerlerBead.cs:57 receiveShadows = false
+      child.receiveShadow = false; // 游戏 PerlerBead.cs:53 receiveShadows = false
       child.layers.set(layer);
     });
   }
@@ -467,7 +480,7 @@ function projectExtent(camera, corners) {
 
 /**
  * 归一化模板：水平最大边（x/z 中较大者）缩放到 1，水平居中，底面贴 y = 0。
- * 对应游戏 `PerlerGrid.cs:714-715  BeadFitScale = _cellSize / beadMesh.bounds.size.x`。
+ * 对应游戏 `PerlerGrid.cs:344-345  BeadFitScale = _cellSize / beadMesh.bounds.size.x`。
  */
 function normalizeTemplate(root) {
   const wrapper = new THREE.Group();

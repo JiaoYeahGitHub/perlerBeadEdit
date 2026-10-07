@@ -3,13 +3,15 @@ import { ICON_SPEC } from '../core/BeadStage.js';
 /**
  * IconExporter — 导出 256×256 豆子图标。
  *
- * 构图规则对齐参考图 `public/bead_13.png`（= Unity `Assets/Resources/Beads/bead_13.png`）：
+ * 构图规则对齐参考图 `public/bead_13.png`（取自旧工程 perler3D 的
+ * `Assets/Resources/Beads/bead_13.png`；perlerSteam 已删除该目录，仅作规格参考）：
  *   1. 场景 = 豆子色的地面 + ICON_SPEC.beadCount 颗同色同材质豆子按重力堆叠（BeadStage，透视相机取景）；
  *   2. 用 iconCamera 渲染成透明底画布；
  *   3. 在渲染结果「之下」铺一层圆角矩形纯色（豆子颜色）—— 保证背景像素恒等于豆子颜色；
  *   4. 按同一圆角矩形做 alpha 遮罩 —— 内容区（13..242）保持不透明，四周透明。
  *
- * 命名沿用游戏约定：`Beads/<name>.png`（BeadConfig.cs:20 SpritePath = "Beads/" + name）。
+ * 命名沿用旧版约定 `Beads/<name>.png`（`Resources/Beads/` 目录在 perlerSteam 已删除，
+ * 因此这里只是保持与旧数据一致的命名，落地位置由程序侧决定）。
  */
 export class IconExporter {
   /**

@@ -8,9 +8,13 @@ import * as THREE from 'three';
  * `MeshStandardMaterial`（metalness / roughness / color / opacity；介质 F0 固定 0.04 ≈ IOR 1.45）。
  * 因此这里不引入 transmission / clearcoat —— 游戏 shader 里没有，加上会偏离游戏观感。
  *
- * 颜色：游戏侧 `PerlerBead.ApplyColor` 把 sRGB hex 显式 `Mathf.GammaToLinearSpace` 后写入
- * `_BaseColor`；three 在 `ColorManagement.enabled`（默认 true）下 `Color.setStyle('#RRGGBB')`
+ * 颜色：游戏侧 `BeadMaterialBank.Make`（perlerSteam
+ * `Assets/Scripts/Perler/BeadMaterialBank.cs:84-88`）把 sRGB hex 显式 `Mathf.GammaToLinearSpace`
+ * 后写入 `_BaseColor`；three 在 `ColorManagement.enabled`（默认 true）下 `Color.setStyle('#RRGGBB')`
  * 同样做精确的 sRGB→Linear 转换，两者一致。Alpha 两侧都不做转换。
+ *
+ * 注意（与游戏机制的差异，不影响观感）：游戏按 (类型 × 颜色) 烘焙 `sharedMaterial` 并开 GPU Instancing，
+ * 编辑器只用一个共享材质对象 + InstancedMesh / 单颗克隆，不缓存材质。
  *
  * @param {THREE.Material|null} target 复用已有材质（避免逐次分配）
  * @param {{color:string, alpha:number}} bead

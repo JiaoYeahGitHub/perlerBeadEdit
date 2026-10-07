@@ -1,0 +1,18 @@
+{
+  "_comment": "天空盒资源目录。每条对应 Unity 工程 perlerSteam 的 Assets/Resources/Materials/<id>.mat（内置 Skybox/Cubemap，tex = Assets/Resources/SkyBox/<file>）。tint/exposure/rotation 即该材质的 _Tint / _Exposure / _Rotation，intensity 段对应 RenderSettings.ambientIntensity 与 reflectionIntensity（PerlerGameManager.EnterGameEnvironment 均为 1）。",
+  "skyboxes": [
+    {
+      "id": "forest",
+      "name": "forest（棚灯）",
+      "file": "forest.exr",
+      "unityMaterial": "Assets/Resources/Materials/forest.mat",
+      "defaults": {
+        "tint": [0.5, 0.5, 0.5],
+        "exposure": 1,
+        "rotation": 0,
+        "ambientIntensity": 1,
+        "reflectionIntensity": 1
+      }
+    }
+  ]
+}

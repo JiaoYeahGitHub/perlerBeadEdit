@@ -1,11 +1,11 @@
 /**
  * BeadTypes — 拼豆材质类型表。
  *
- * 逐字对应 Unity 工程 `E:/yujiaoWorkSpace/perler` 的实现：
+ * 逐字对应 Unity 工程 `perlerSteam` 的实现：
  *   - Assets/Resources/Shaders/Master_Bead_Shader.shader          （不透明：Basic / Matallic / Metta）
  *   - Assets/Resources/Shaders/Master_Bead_Shader_Transparent.shader（透明：Transparent，玻璃）
- *   - Assets/Scripts/Perler/BeadMaterialBank.cs:49-52,64-68       （每类材质的 BSDF 取值来源）
- *   - Assets/Scripts/Perler/PerlerBead.cs:165-181                 （逐豆颜色 → _BaseColor，显式 gamma→linear）
+ *   - Assets/Scripts/Perler/BeadMaterialBank.cs:23-25             （每类材质的 BSDF 取值来源：Roughness/Metallic/Glass）
+ *   - Assets/Scripts/Perler/BeadMaterialBank.cs:74-92             （逐 (类型×颜色) 烘焙材质，_BaseColor 显式 gamma→linear）
  *
  * 游戏内 BSDF 语义（Unity Built-in `surf Standard`，金属工作流）：
  *   o.Albedo     = _BaseColor.rgb（线性）
@@ -18,7 +18,7 @@
 
 /** @typedef {{index:number,key:string,label:string,desc:string,shader:string,materialName:string,currency:string,roughness:number,metallic:number,ior:number,thickness:number,transparent:boolean}} BeadTypeDef */
 
-/** 游戏 bead_config.json 的分组顺序即此顺序（BeadConfig.cs:67-81 Basic→Matallic→Metta→Transparent） */
+/** 材质分组顺序（= `BeadMaterialBank` 的类型索引 0..3；旧版 `bead_config.json` 的分组顺序相同） */
 export const TYPE_ORDER = ['Basic', 'Matallic', 'Metta', 'Transparent'];
 
 /** 可选货币（PlayerData.cs / GlobalConfig.cs） */
