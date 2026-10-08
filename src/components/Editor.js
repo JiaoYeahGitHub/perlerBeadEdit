@@ -38,7 +38,7 @@ export class Editor {
     this._boardModel = null;
     /** @type {'bead'|'board'|'scene'} */
     this._mode = 'bead';
-    /** 场景模式参数（盘面大小 / 视距 / 用哪颗豆子 / 可见性） */
+    /** 场景模式参数（盘面大小 / 视距 / 用哪颗豆子 / 可见性 / 随机填充） */
     this._scene = {
       cols: BOARD_SPEC.defaultCols,
       rows: BOARD_SPEC.defaultRows,
@@ -46,6 +46,8 @@ export class Editor {
       beadId: null,
       showBoard: true,
       showBeads: true,
+      fillRatio: BOARD_SPEC.defaultFillRatio,
+      fillSeed: BOARD_SPEC.defaultFillSeed,
     };
     this._notifTimeout = null;
     this._syncHandle = 0;
@@ -162,7 +164,9 @@ export class Editor {
       return `只展示棋盘 · ${this._board.tiles} × ${this._board.tiles} 格 · 格距 ${BOARD_SPEC.cellSize}`;
     }
     const bead = this._sceneBead().bead;
-    return `棋盘 + 豆子 · ${this._scene.cols} × ${this._scene.rows} 格 · 豆子 ${bead?.name ?? '—'}`;
+    const cells = this._board.cols * this._board.rows;
+    const fill = this._board.fillRatio >= 1 ? '铺满' : `${this._board.beadCount}/${cells} 颗`;
+    return `棋盘 + 豆子 · ${this._scene.cols} × ${this._scene.rows} 格 · 豆子 ${bead?.name ?? '—'} · ${fill}`;
   }
 
   // ─── 豆子列表 ──────────────────────────────────────
@@ -533,6 +537,9 @@ export class Editor {
         tileY: BOARD_SPEC.tileY,
         sceneCols: this._scene.cols,
         sceneRows: this._scene.rows,
+        fillRatio: this._board.fillRatio,
+        fillSeed: this._board.fillSeed,
+        beadCount: this._board.beadCount,
       },
       lighting: sky ? {
         skybox: sky.id,
@@ -620,8 +627,10 @@ export class Editor {
         this._board.frameGameView(camera, target, this._scene.distance));
     }
 
-    if (this._mode === 'scene') this._board.setBoardSize(this._scene.cols, this._scene.rows);
-    else this._board.setTileCount(this._board.tiles);
+    if (this._mode === 'scene') {
+      this._board.setBoardSize(this._scene.cols, this._scene.rows);
+      this._board.setBeadFill({ ratio: this._scene.fillRatio, seed: this._scene.fillSeed });
+    } else this._board.setTileCount(this._board.tiles);
 
     this._viewport.resetView();
     this._scheduleSync();
@@ -803,6 +812,25 @@ export class Editor {
       this._scheduleSync();
     });
 
+    // 随机填充密度：改密度 = 同一份随机图案的子集（不会整盘重排）
+    const ratio = document.getElementById('scene-fill-ratio');
+    ratio?.addEventListener('input', () => {
+      this._board.setBeadFill({ ratio: parseFloat(ratio.value) });
+      this._scene.fillRatio = this._board.fillRatio;
+      if (this._scene.fillRatio >= 1) this._scene.fillRatio = 1;
+      setText('val-scene-fill-ratio', this._board.fillRatio.toFixed(2));
+      this._scheduleSync();
+    });
+
+    // 换一批随机分布：只换种子（同一 seed + 同一盘面 → 同一份分布，可复现）
+    document.getElementById('btn-random-beads')?.addEventListener('click', () => {
+      this._scene.fillSeed = (Math.random() * 0xffffffff) >>> 0;
+      this._board.setBeadFill({ seed: this._scene.fillSeed });
+      this._scheduleSync();
+      const cells = this._board.cols * this._board.rows;
+      this._notify(`随机填充：${this._board.beadCount} / ${cells} 颗（种子 ${this._scene.fillSeed}）`, 'success');
+    });
+
     const dist = document.getElementById('scene-distance');
     dist?.addEventListener('input', () => {
       this._scene.distance = parseFloat(dist.value);
@@ -845,6 +873,16 @@ export class Editor {
     if (rows && document.activeElement !== rows) rows.value = String(this._board.rows);
 
     setValue('board-tiles', 'val-board-tiles', this._board.tiles);
+    setValue('scene-fill-ratio', 'val-scene-fill-ratio', this._board.fillRatio);
+    this._scene.fillRatio = this._board.fillRatio;
+
+    const count = document.getElementById('scene-bead-count');
+    if (count) {
+      const cells = this._board.cols * this._board.rows;
+      const pct = Math.round(this._board.fillRatio * 100);
+      count.textContent = `已填充 ${this._board.beadCount} / ${cells} 颗 · 密度 ${pct}% · 种子 ${this._board.fillSeed}`;
+    }
+
     this._syncFitHint();
   }
 

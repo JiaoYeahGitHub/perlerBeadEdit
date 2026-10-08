@@ -326,6 +326,23 @@
               </p>
             </div>
             <div class="section">
+              <h3>盘上豆子分布</h3>
+              <div class="prop-group">
+                <label class="prop-row">
+                  <span>填充密度</span>
+                  <input type="range" id="scene-fill-ratio" min="0.02" max="1" step="0.01" value="0.35" />
+                  <span class="val" id="val-scene-fill-ratio">0.35</span>
+                </label>
+              </div>
+              <button id="btn-random-beads" class="btn btn-primary btn-block">随机填充豆子</button>
+              <p class="hint" id="scene-bead-count">—</p>
+              <p class="hint">
+                默认按填充密度随机散落（不铺满棋盘），点按钮换一批随机分布（同种子 + 同盘面结果可复现）；
+                密度调回 1.00 即铺满。
+              </p>
+            </div>
+
+            <div class="section">
               <h3>游戏视角</h3>
               <div class="prop-group">
                 <label class="prop-row">

@@ -34,6 +34,8 @@ export const BOARD_SPEC = {
   defaultTiles: 1,    // 「只展示棋盘」默认格数
   defaultCols: 32,    // 「棋盘 + 豆子」默认盘面
   defaultRows: 32,
+  defaultFillRatio: 0.35, // 盘上豆子默认填充密度（不铺满）
+  defaultFillSeed: 20261008,
   maxTiles: 64,       // 上限：64×64 与关卡数据同量级（4096 格）
   // 游戏相机（PerlerGameManager.cs:68-74 + GridZoomController.cs:13-14,31-34）
   camera: {
@@ -76,6 +78,11 @@ export class BoardStage {
     this.rows = BOARD_SPEC.defaultRows;
     /** 棋盘瓦片的实际阵列（「只展示棋盘」= tiles×tiles；「棋盘 + 豆子」= cols×rows） */
     this.boardCells = { cols: BOARD_SPEC.defaultTiles, rows: BOARD_SPEC.defaultTiles };
+    /** 盘上豆子分布：随机填充比例（1 = 铺满）与随机种子 */
+    this.fillRatio = BOARD_SPEC.defaultFillRatio;
+    this.fillSeed = BOARD_SPEC.defaultFillSeed;
+    /** 当前实际填充的豆子数量（只读，供界面显示） */
+    this.beadCount = 0;
 
     /** @type {THREE.Group} 棋盘瓦片 */
     this.boardGroup = new THREE.Group();
@@ -129,6 +136,17 @@ export class BoardStage {
   setBeadStyle(bead, type) {
     applyBeadMaterial(this._beadMat, bead, type);
     this._beadMat.needsUpdate = true;
+  }
+
+  /**
+   * 盘上豆子的分布：按 `ratio` 随机填充（不再是每格一颗）。
+   * 同一 `seed` + 同一盘面 → 同一份分布（可复现，便于美术对照截图）；
+   * `ratio = 1` 即铺满（旧行为）。
+   */
+  setBeadFill({ ratio, seed } = {}) {
+    if (ratio !== undefined) this.fillRatio = Math.min(1, Math.max(0, Number(ratio) || 0));
+    if (seed !== undefined) this.fillSeed = Number(seed) || 0;
+    this._rebuildBeads();
   }
 
   /** 各模式的可见性：棋盘瓦片 / 盘上豆子 */
@@ -218,6 +236,7 @@ export class BoardStage {
 
   _rebuildBeads() {
     disposeChildren(this.beadGroup);
+    this.beadCount = 0;
     if (!this.beadTemplate) return;
 
     const step = BOARD_SPEC.cellSize + BOARD_SPEC.spacing;
@@ -228,18 +247,32 @@ export class BoardStage {
     const width = this.beadTemplate.size.x > 0.01 ? this.beadTemplate.size.x : 1;
     const align = alignFor(this.beadTemplate.root, BOARD_SPEC.cellSize / width);
 
+    /**
+     * 随机填充：逐格抽签决定是否落子（逐格调用 rand()，先取数再比较，
+     * 因此改密度 = 同一份图案的子集，调密度不会整盘重排）。
+     * 同一 seed + 同一盘面 → 完全相同的分布，便于美术复现截图；ratio = 1 即铺满。
+     */
+    const rand = mulberry32(
+      (Math.imul(this.fillSeed | 0, 73856093) ^ Math.imul(this.cols, 19349663) ^ Math.imul(this.rows, 83492791)) >>> 0,
+    );
     const cells = [];
     for (let ix = 0; ix < this.cols; ix++) {
       for (let iz = 0; iz < this.rows; iz++) {
+        const roll = rand();
+        if (this.fillRatio < 1 && roll >= this.fillRatio) continue;
         cells.push(new THREE.Vector3(startX + ix * step, BOARD_SPEC.beadY, -(startZ + iz * step)));
       }
     }
+    // 密度再低也至少留一颗（否则界面看起来像"没反应"）
+    if (cells.length === 0) cells.push(new THREE.Vector3(0, BOARD_SPEC.beadY, 0));
+
     for (const inst of buildInstancedMeshes(this.beadTemplate.root, cells, {
       align,
       material: this._beadMat,
     })) {
       this.beadGroup.add(inst);
     }
+    this.beadCount = cells.length;
   }
 
   dispose() {
@@ -256,6 +289,18 @@ export class BoardStage {
 function clampInt(v, min, max, fallback) {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
+/** 确定性随机：同一 seed → 同一份盘面分布（截图可复现） */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /**
